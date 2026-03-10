@@ -1,0 +1,7 @@
+﻿setup/
+.venv/
+__pycache__/
+dist/
+build/
+.auth_token
+.env
