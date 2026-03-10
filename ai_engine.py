@@ -5,57 +5,58 @@ from groq import Groq
 from PyQt6.QtCore import QThread, pyqtSignal
 from constants import GROQ_MODEL, DEVELOPER_SYSTEM_PROMPT
 
+# Modelo de visión recomendado
+VISION_MODEL = "llama-3.2-11b-vision-preview"
+
 class AIWorker(QThread):
-    """
-    Motor Multi-Threading para el asistente Omni.
-    Refactorizado para ser agnóstico al modelo y eficiente en memoria.
-    """
     response_ready = pyqtSignal(str)
+    chunk_ready = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, prompt: str, history: List[Dict[str, str]], api_key: Optional[str] = None):
+    def __init__(self, prompt: str, history: List[Dict], image_b64: Optional[str] = None):
         super().__init__()
         self.prompt = prompt
         self.history = history
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        
-        if not self.api_key:
-            raise ValueError("API Key faltante.")
+        self.image_b64 = image_b64
 
-    def run(self) -> None:
-        """ Ejecución del worker de forma asíncrona. """
+    def run(self):
         try:
-            client = Groq(api_key=self.api_key)
-            messages = self._build_messages()
+            client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+            
+            # Construir mensaje con imagen si existe
+            content = []
+            if self.image_b64:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{self.image_b64}"}
+                })
+            
+            content.append({"type": "text", "text": self.prompt})
+
+            messages = [{"role": "system", "content": DEVELOPER_SYSTEM_PROMPT}]
+            for msg in self.history:
+                messages.append({"role": "user" if msg["role"] == "user" else "assistant", "content": msg["content"]})
+            
+            messages.append({"role": "user", "content": content})
+
+            # Usar modelo de visión si hay imagen, sino el estándar
+            model = VISION_MODEL if self.image_b64 else GROQ_MODEL
 
             completion = client.chat.completions.create(
-                model=GROQ_MODEL,
+                model=model,
                 messages=messages,
-                temperature=0.5,
+                temperature=0.7,
                 max_tokens=2048,
-                stream=False
+                stream=True
             )
             
-            response = completion.choices[0].message.content
-            if response:
-                self.response_ready.emit(response)
-            else:
-                self.error_occurred.emit("Respuesta vacía del motor IA.")
-                
-        except Exception as e:
-            self.error_occurred.emit(f"Falla del Motor IA: {str(e)}")
-
-    def _build_messages(self) -> List[Dict[str, str]]:
-        """ Construye la lista de mensajes compatible con la API de Groq. """
-        messages = [{"role": "system", "content": DEVELOPER_SYSTEM_PROMPT}]
-        
-        # Añadir recordatorio dinámico basado en el idioma del prompt actual
-        mirror_instruction = "Remember: Respond in English if the user writes in English, or Spanish if the user writes in Spanish."
-        messages.append({"role": "system", "content": mirror_instruction})
-        
-        for msg in self.history:
-            role = "assistant" if msg["role"] == "model" else "user"
-            messages.append({"role": role, "content": msg["content"]})
+            full_response = ""
+            for chunk in completion:
+                if chunk.choices[0].delta.content:
+                    text_chunk = chunk.choices[0].delta.content
+                    full_response += text_chunk
+                    self.chunk_ready.emit(text_chunk)
             
-        messages.append({"role": "user", "content": self.prompt})
-        return messages
+            self.response_ready.emit(full_response)
+        except Exception as e:
+            self.error_occurred.emit(f"Error Neural: {str(e)}")

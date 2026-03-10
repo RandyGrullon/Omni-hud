@@ -1,14 +1,11 @@
-import easyocr
-import numpy as np
-from PIL import ImageGrab, Image
+import base64
+import io
+from PIL import ImageGrab
 from PyQt6.QtWidgets import QWidget, QRubberBand
 from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal, QPoint
 
-# Inicializar lector (se descarga la primera vez)
-reader = None
-
 class ScreenSelector(QWidget):
-    """ Capa semi-transparente para seleccionar área de pantalla. """
+    """ Capa para seleccionar área de pantalla. """
     area_selected = pyqtSignal(QRect)
 
     def __init__(self):
@@ -33,24 +30,17 @@ class ScreenSelector(QWidget):
         self.area_selected.emit(self.rubber_band.geometry())
         self.close()
 
-def extract_text_from_area(rect: QRect):
-    """ Captura el área y usa EasyOCR. """
-    global reader
+def capture_and_base64(rect: QRect):
+    """ Captura el área y la devuelve en Base64 para Groq Vision. """
     try:
-        if reader is None:
-            # Inicialización perezosa para no ralentizar el inicio de la app
-            reader = easyocr.Reader(['es', 'en'], gpu=False)
-
         bbox = (rect.x(), rect.y(), rect.x() + rect.width(), rect.y() + rect.height())
         screenshot = ImageGrab.grab(bbox=bbox)
         
-        # Convertir imagen PIL a formato compatible con EasyOCR (numpy array)
-        img_np = np.array(screenshot)
+        # Optimizar tamaño de imagen para la API
+        buffer = io.BytesIO()
+        screenshot.save(buffer, format="JPEG", quality=85)
+        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         
-        results = reader.readtext(img_np)
-        # Unir todos los fragmentos de texto detectados
-        text = " ".join([res[1] for res in results])
-        
-        return text.strip()
+        return img_base64
     except Exception as e:
-        return f"Error en OCR (EasyOCR): {str(e)}"
+        return None
