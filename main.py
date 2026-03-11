@@ -78,12 +78,22 @@ class OmniController:
             return
 
         try:
-            with open(token_path, "r") as f: email = f.read().strip()
-            res = self.supabase.table("profiles").select("*").eq("email", email).single().execute()
-            profile = res.data
+            with open(token_path, "r") as f: token_data = f.read().strip()
+            
+            # Búsqueda híbrida para evitar error UUID (Email o ID)
+            if "@" in token_data:
+                res = self.supabase.table("profiles").select("*").eq("email", token_data).execute()
+            else:
+                res = self.supabase.table("profiles").select("*").eq("id", token_data).execute()
+            
+            if not res.data or len(res.data) == 0:
+                raise Exception("Identity link broken. Please login again.")
 
-            if not profile:
-                raise Exception("Profile not found in database. Please log in again.")
+            profile = res.data[0]
+            
+            # Migración automática del token si era email
+            if "@" in token_data:
+                with open(token_path, "w") as f: f.write(profile['id'])
 
             # REGLA DE DUEÑO: Si es 'architect', acceso total.
             is_owner = profile.get("plan") == "architect"
@@ -102,6 +112,12 @@ class OmniController:
 
             self.cached_profile = profile
             self.last_profile_check = now
+            
+            # Notificar actividad a la base de datos
+            try:
+                self.supabase.table("profiles").update({"updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", profile['id']).execute()
+            except: pass
+
             self.ui.update_profile_info(profile)
             self.ui.show_and_focus()
         except Exception as e:
@@ -135,20 +151,35 @@ class OmniController:
                 res = self.supabase.auth.sign_in_with_password({"email": email, "password": password})
                 if not res.user: raise Exception("Invalid credentials")
                 
-                profile_res = self.supabase.table("profiles").select("*").eq("id", res.user.id).single().execute()
-                profile = profile_res.data
+                # Buscar por ID es más fiable que por email
+                profile_res = self.supabase.table("profiles").select("*").eq("id", res.user.id).execute()
                 
-                if profile:
-                    self.user_session = res.session
-                    self.cached_profile = profile
-                    import time
-                    self.last_profile_check = time.time()
-                    with open(".auth_token", "w") as f: f.write(email)
-                    self.ui.update_profile_info(profile)
-                    QTimer.singleShot(0, self._check_initial_state)
+                if profile_res.data and len(profile_res.data) > 0:
+                    profile = profile_res.data[0]
                 else:
-                    raise Exception("Profile synchronization failed")
+                    # AUTO-CREACIÓN: Si no existe el perfil, lo creamos en el momento
+                    print("Profile missing. Creating auto-profile...")
+                    new_profile = {
+                        "id": res.user.id,
+                        "email": email,
+                        "first_name": email.split('@')[0],
+                        "last_name": "User",
+                        "plan": "free"
+                    }
+                    insert_res = self.supabase.table("profiles").insert(new_profile).execute()
+                    if not insert_res.data: raise Exception("Failed to initialize neural identity.")
+                    profile = insert_res.data[0]
+
+                self.user_session = res.session
+                self.cached_profile = profile
+                import time
+                self.last_profile_check = time.time()
+                # Guardamos el ID en el token para búsquedas futuras más rápidas
+                with open(".auth_token", "w") as f: f.write(res.user.id)
+                self.ui.update_profile_info(profile)
+                QTimer.singleShot(0, self._check_initial_state)
             except Exception as e: 
+                print(f"Login error: {e}")
                 self.ui.login_error.setText(f"Error: {str(e).upper()}")
             finally: 
                 self.ui.set_login_loading(False)
@@ -233,9 +264,62 @@ class OmniController:
             self.process_ai_query("Analiza detalladamente esta captura.", image_b64=img_b64)
 
     def _check_initial_state(self):
-        if not os.path.exists(".auth_token"): self.ui.stack.setCurrentIndex(0); return
-        if not os.getenv("GROQ_API_KEY"): self.ui.stack.setCurrentIndex(1)
-        else: self.ui.stack.setCurrentIndex(2); self.switch_chat(self.current_chat_index)
+        """ 
+        Verificación crítica de seguridad y configuración.
+        Flujo: Sesión -> Suscripción -> IA Config.
+        """
+        # 1. ¿Hay sesión activa?
+        token_path = ".auth_token"
+        if not os.path.exists(token_path):
+            self.ui.stack.setCurrentIndex(0)
+            return
+
+        # 2. ¿Tiene plan válido? (Validación de Persona/Pago)
+        try:
+            with open(token_path, "r") as f: token_data = f.read().strip()
+            
+            # Búsqueda híbrida (ID o Email)
+            if "@" in token_data:
+                res = self.supabase.table("profiles").select("*").eq("email", token_data).execute()
+            else:
+                res = self.supabase.table("profiles").select("*").eq("id", token_data).execute()
+            
+            if not res.data or len(res.data) == 0:
+                self.ui.stack.setCurrentIndex(0)
+                return
+
+            profile = res.data[0]
+            
+            # Migración de token
+            if "@" in token_data:
+                with open(token_path, "w") as f: f.write(profile['id'])
+            
+            # REGLA DE DUEÑO / SUSCRIPCIÓN
+            is_architect = profile.get("plan") == "architect"
+            has_purchase = bool(profile.get("purchase_id"))
+            
+            if not is_architect and not has_purchase:
+                self.ui.login_error.setText("ACCESS DENIED: ACTIVE PLAN REQUIRED")
+                self.ui.stack.setCurrentIndex(0)
+                return
+                
+            self.cached_profile = profile
+            self.ui.update_profile_info(profile)
+        except Exception as e:
+            error_msg = str(e).upper()
+            print(f"Auth Validation Error: {error_msg}")
+            self.ui.login_error.setText(f"ERROR: {error_msg}")
+            # Si hay error de perfil, forzamos re-login
+            self.ui.stack.setCurrentIndex(0)
+            return
+
+        # 3. ¿Tiene la IA configurada?
+        load_dotenv(override=True)
+        if not os.getenv("GROQ_API_KEY"):
+            self.ui.stack.setCurrentIndex(1)
+        else:
+            self.ui.stack.setCurrentIndex(2)
+            self.switch_chat(self.current_chat_index)
 
     def start_document_processing(self, file_path):
         self.doc_worker = DocumentWorker(file_path)
@@ -243,7 +327,30 @@ class OmniController:
         self.doc_worker.start()
 
     def save_configuration(self, api_key):
-        with open(".env", "a") as f: f.write(f"\nGROQ_API_KEY={api_key}")
+        """ Guarda la clave con ruta absoluta y fuerza la persistencia. """
+        env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+        lines = []
+        key_found = False
+        
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding='utf-8') as f:
+                lines = f.readlines()
+
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith("GROQ_API_KEY="):
+                new_lines.append(f"GROQ_API_KEY={api_key}\n")
+                key_found = True
+            else:
+                new_lines.append(line)
+
+        if not key_found:
+            new_lines.append(f"GROQ_API_KEY={api_key}\n")
+
+        with open(env_path, "w", encoding='utf-8') as f:
+            f.writelines(new_lines)
+            
+        os.environ["GROQ_API_KEY"] = api_key
         os.execl(sys.executable, sys.executable, *sys.argv)
 
     def handle_voice_toggle(self, source="system"):
