@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; }
+    body { background: transparent; cursor: crosshair; }
+    #rect {
+      position: fixed;
+      border: 2px solid #10b981;
+      background: rgba(16,185,129,0.1);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="rect"></div>
+  <script>
+    const rect = document.getElementById('rect');
+    let start = null;
+    function move(e) {
+      if (!start) return;
+      const x = Math.min(start.x, e.screenX);
+      const y = Math.min(start.y, e.screenY);
+      const w = Math.abs(e.screenX - start.x);
+      const h = Math.abs(e.screenY - start.y);
+      rect.style.left = x + 'px';
+      rect.style.top = y + 'px';
+      rect.style.width = w + 'px';
+      rect.style.height = h + 'px';
+    }
+    function up(e) {
+      if (!start) return;
+      const x = Math.min(start.x, e.screenX);
+      const y = Math.min(start.y, e.screenY);
+      const w = Math.abs(e.screenX - start.x);
+      const h = Math.abs(e.screenY - start.y);
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      if (w > 10 && h > 10) {
+        window.api?.sendRegion({ x, y, width: w, height: h });
+      }
+      window.close();
+    }
+    document.addEventListener('mousedown', (e) => {
+      start = { x: e.screenX, y: e.screenY };
+      rect.style.left = e.screenX + 'px';
+      rect.style.top = e.screenY + 'px';
+      rect.style.width = '0';
+      rect.style.height = '0';
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  </script>
+</body>
+</html>

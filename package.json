@@ -1,0 +1,43 @@
+{
+  "name": "omni-hud",
+  "version": "1.0.2",
+  "description": "Advanced neural-link HUD for real-time AI interaction",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:dir": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.omni.hud",
+    "productName": "Omni HUD",
+    "directories": { "output": "dist" },
+    "files": ["electron/**/*", "src/**/*", "package.json"],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "forceCodeSigning": false
+  },
+  "author": "Omni",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1",
+    "form-data": "^4.0.0",
+    "groq-sdk": "^0.3.0",
+    "mammoth": "^1.6.0",
+    "pdf-parse": "^1.1.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.9.1"
+  }
+}

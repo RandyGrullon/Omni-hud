@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;">
+  <title>Omni HUD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;600&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="login-page">
+  <div class="splash" id="splash" aria-hidden="false">
+    <div class="splash-inner">
+      <div class="splash-logo">🤖</div>
+      <h1 class="splash-title">OMNI</h1>
+      <p class="splash-subtitle">Neural workspace</p>
+      <div class="splash-bar">
+        <div class="splash-bar-fill"></div>
+      </div>
+    </div>
+  </div>
+  <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;">
+    <defs>
+      <symbol id="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></symbol>
+      <symbol id="icon-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+      <symbol id="icon-attach" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></symbol>
+      <symbol id="icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+      <symbol id="icon-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
+      <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+      <symbol id="icon-screen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+      <symbol id="icon-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></symbol>
+      <symbol id="icon-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h3l2 3h10a2 2 0 012 2z"/></symbol>
+      <symbol id="icon-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></symbol>
+      <symbol id="icon-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></symbol>
+      <symbol id="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></symbol>
+    </defs>
+  </svg>
+  <div id="app" class="app-hidden">
+    <header class="top-bar">
+      <button type="button" class="btn hamburger" id="btn-hamburger" title="Menu"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></button>
+      <div class="drag-handle"></div>
+      <button type="button" class="btn" id="btn-info" title="Help"><svg class="icon" aria-hidden="true"><use href="#icon-info"/></svg></button>
+      <button type="button" class="btn close" id="btn-close" title="Close"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
+    </header>
+    <div class="main-layout">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-inner">
+          <div class="sidebar-header">
+            <span class="history-label">HISTORY</span>
+            <button type="button" class="new-session" id="btn-new-session" title="New chat"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg> NEW</button>
+          </div>
+          <ul class="chat-list" id="chat-list"></ul>
+          <div class="sidebar-footer">
+            <button type="button" class="btn-icon btn-icon-only" id="btn-profile" title="Profile"><svg class="icon" aria-hidden="true"><use href="#icon-user"/></svg></button>
+            <button type="button" class="btn-icon btn-icon-only logout" id="btn-logout" title="Logout"><svg class="icon" aria-hidden="true"><use href="#icon-logout"/></svg></button>
+          </div>
+        </div>
+      </aside>
+      <main class="content-area">
+        <div class="pages" id="pages">
+          <div class="page page-login active" data-page="0">
+            <div class="flow-card">
+              <div class="logo">🤖</div>
+              <h1>Welcome to Omni</h1>
+              <p class="subtitle">Sign in to your neural workspace</p>
+              <input type="email" id="login-email" placeholder="Email address" autocomplete="email">
+              <div class="input-password-wrap">
+                <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+                <button type="button" class="btn-password-toggle" id="btn-toggle-login-password" title="Mostrar contraseña" aria-label="Mostrar contraseña"><svg class="icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
+              </div>
+              <label class="checkbox-remember">
+                <input type="checkbox" id="login-remember" name="remember">
+                <span class="checkbox-label">Recordarme</span>
+              </label>
+              <p class="error" id="login-error"></p>
+              <button type="button" class="btn-primary" id="btn-login">SIGN IN</button>
+            </div>
+          </div>
+          <div class="page page-activation" data-page="1">
+            <div class="flow-card">
+              <div class="logo">🔐</div>
+              <h1>System Activation</h1>
+              <p class="subtitle">Enter your neural access key to link this device.</p>
+              <input type="text" id="activation-key" placeholder="OMNI-XXXX-XXXX-XXXX">
+              <p class="error" id="activation-error"></p>
+              <button type="button" class="btn-primary" id="btn-activate">ACTIVATE OMNI</button>
+            </div>
+          </div>
+          <div class="page page-config" data-page="2">
+            <div class="flow-card">
+              <h1>ENGINE CONFIG</h1>
+              <div class="input-password-wrap">
+                <input type="password" id="config-api-key" placeholder="Enter Groq API Key">
+                <button type="button" class="btn-password-toggle" id="btn-toggle-config-password" title="Mostrar clave" aria-label="Mostrar clave"><svg class="icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
+              </div>
+              <button type="button" class="btn-primary" id="btn-save-config">INITIALIZE SYSTEM</button>
+            </div>
+          </div>
+          <div class="page page-chat" data-page="3">
+            <div class="chat-display" id="chat-display"></div>
+            <div class="input-row">
+              <div style="position: relative;">
+                <button type="button" class="btn-icon" id="btn-tools" title="Tools"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg></button>
+                <div class="tools-menu" id="tools-menu">
+                  <button type="button" data-tool="screen_read"><svg class="icon" aria-hidden="true"><use href="#icon-screen"/></svg> Read Screen</button>
+                  <button type="button" data-tool="clipboard"><svg class="icon" aria-hidden="true"><use href="#icon-clipboard"/></svg> Clipboard</button>
+                </div>
+              </div>
+              <textarea id="chat-input" placeholder="Send a message to Omni..." rows="1"></textarea>
+              <button type="button" class="btn-icon" id="btn-attach" title="Files"><svg class="icon" aria-hidden="true"><use href="#icon-attach"/></svg></button>
+            </div>
+          </div>
+          <div class="page page-file" data-page="4">
+            <div class="header">
+              <h2>SYSTEM_FILES</h2>
+              <button type="button" class="back" id="file-back">BACK</button>
+            </div>
+            <div class="file-explorer">
+              <div class="file-explorer-toolbar">
+                <input type="text" id="file-search" class="file-search-input" placeholder="Buscar archivo o carpeta…">
+                <button type="button" class="file-back-btn" id="file-explorer-back" style="display: none;">← Atrás</button>
+              </div>
+              <div class="file-breadcrumb" id="file-breadcrumb"></div>
+              <div class="tree file-tree-list" id="file-tree"></div>
+            </div>
+            <button type="button" class="analyze-btn" id="btn-open-file" style="display: none;">OPEN FILE TO ANALYZE</button>
+          </div>
+          <div class="page page-profile" data-page="5">
+            <div class="header">
+              <h2>USER PROFILE</h2>
+              <button type="button" class="back" id="profile-back"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
+            </div>
+            <div class="card">
+              <p id="profile-name">Name: Loading...</p>
+              <p id="profile-email">Email: Loading...</p>
+              <p id="profile-plan">Plan: Loading...</p>
+              <p id="profile-expiry">Expires: Loading...</p>
+              <p id="profile-error" class="profile-error"></p>
+            </div>
+            <button type="button" class="logout-btn" id="btn-profile-logout"><svg class="icon" aria-hidden="true"><use href="#icon-logout"/></svg> LOGOUT FROM SYSTEM</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+  <div class="loader-overlay" id="global-loader" aria-hidden="true">
+    <div class="loader-box">
+      <div class="loader-spinner"></div>
+      <p class="loader-text" id="loader-text">Calculando...</p>
+    </div>
+  </div>
+  <div class="modal-overlay" id="modal-delete-overlay">
+    <div class="modal modal-confirm" id="modal-delete-chat">
+      <h3>Eliminar sesión</h3>
+      <p class="modal-confirm-msg">¿Eliminar esta conversación? Esta acción no se puede deshacer.</p>
+      <div class="modal-confirm-actions">
+        <button type="button" class="btn-modal-cancel" id="btn-delete-cancel">Cancelar</button>
+        <button type="button" class="btn-modal-delete" id="btn-delete-confirm"><svg class="icon" aria-hidden="true"><use href="#icon-trash"/></svg> Eliminar</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="modal-logout-overlay">
+    <div class="modal modal-confirm" id="modal-logout">
+      <h3>Cerrar sesión</h3>
+      <p class="modal-confirm-msg">¿Salir de tu cuenta? Tendrás que iniciar sesión de nuevo para usar Omni.</p>
+      <div class="modal-confirm-actions">
+        <button type="button" class="btn-modal-cancel" id="btn-logout-cancel">Cancelar</button>
+        <button type="button" class="btn-modal-logout" id="btn-logout-confirm"><svg class="icon" aria-hidden="true"><use href="#icon-logout"/></svg> Cerrar sesión</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <h3>OMNI CORE</h3>
+      <span class="version">v1.0.2</span>
+      <p class="desc">Advanced neural-link HUD for real-time information processing and LPU-powered AI interaction.</p>
+      <div class="hotkeys">
+        <div class="row"><span class="key">CTRL + SPACE</span><span class="desc">Toggle HUD</span></div>
+        <div class="row"><span class="key">CTRL + SHIFT + R</span><span class="desc">System Audio</span></div>
+        <div class="row"><span class="key">CTRL + SHIFT + M</span><span class="desc">Microphone</span></div>
+        <div class="row"><span class="key">CTRL + L</span><span class="desc">Clear Chat</span></div>
+        <div class="row"><span class="key">ESC</span><span class="desc">Back / Hide</span></div>
+      </div>
+      <button type="button" class="btn-update" id="btn-check-updates">Check for updates</button>
+      <button type="button" class="btn-got-it" id="btn-modal-close">GOT IT</button>
+    </div>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
