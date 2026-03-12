@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { $ } from './utils.js';
 import { showToast } from './ui.js';
-import { ensureCurrentChat, appendUserMessage, sendMessage } from './chat.js';
+import { ensureCurrentChat, appendUserMessage, sendMessage, persistChats } from './chat.js';
 import { MAX_RECORDING_MS } from './constants.js';
 
 export function setupToolsMenu(contentArea) {
@@ -23,7 +23,7 @@ export function setupToolsMenu(contentArea) {
           const chat = ensureCurrentChat('Portapapeles');
           appendUserMessage(`[CLIPBOARD]\n${text}`);
           chat.messages.push({ role: 'user', content: `[CLIPBOARD]\n${text}` });
-          await window.omni.saveChats(state.chats);
+          await persistChats();
           const input = $('chat-input');
           if (input) { input.value = 'Analiza: '; input.focus(); }
           showToast('Portapapeles añadido al chat', 'success');
@@ -44,19 +44,49 @@ export function setupToolsMenu(contentArea) {
   });
 }
 
+async function getScreenAudioStream() {
+  const audioOpts = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: false };
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: false,
+      audio: audioOpts
+    });
+    if (stream.getAudioTracks().length > 0) return stream;
+    stream.getTracks().forEach((t) => t.stop());
+  } catch (_) {}
+  const fallback = await navigator.mediaDevices.getDisplayMedia({
+    video: true,
+    audio: true
+  });
+  const audioTracks = fallback.getAudioTracks();
+  if (audioTracks.length === 0) {
+    fallback.getTracks().forEach((t) => t.stop());
+    return null;
+  }
+  fallback.getVideoTracks().forEach((t) => t.stop());
+  return new MediaStream(audioTracks);
+}
+
 export function setupVoice(contentArea) {
+  const removeListeningClasses = () => contentArea?.classList.remove('listening-border', 'mic', 'system', 'system_audio');
+
   window.omni.onVoiceTrigger(async (source) => {
     if (state.mediaRecorder?.state === 'recording') {
       state.mediaRecorder.stop();
       return;
     }
     try {
-      const stream = source === 'system_audio'
-        ? await navigator.mediaDevices.getDisplayMedia({
-            video: false,
-            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: false }
-          })
+      const isScreen = source === 'system' || source === 'system_audio';
+      const stream = isScreen
+        ? await getScreenAudioStream()
         : await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      if (!stream || stream.getAudioTracks().length === 0) {
+        if (stream) stream.getTracks().forEach((t) => t.stop());
+        showToast(isScreen ? 'Selecciona una pantalla con audio para grabar.' : 'No se pudo acceder al micrófono.', 'error');
+        return;
+      }
+
       state.mediaRecorder = new MediaRecorder(stream);
       state.recordingChunks = [];
       state.mediaRecorder.ondataavailable = (e) => { if (e.data.size) state.recordingChunks.push(e.data); };
@@ -71,17 +101,21 @@ export function setupVoice(contentArea) {
             const input = $('chat-input');
             if (input) { input.value = result.text; input.focus(); }
           }
-          contentArea?.classList.remove('listening-border', 'mic', 'system_audio');
+          removeListeningClasses();
         };
         reader.readAsDataURL(blob);
       };
-      contentArea?.classList.add('listening-border', source === 'mic' ? 'mic' : source === 'system_audio' ? 'system_audio' : '');
+
+      contentArea?.classList.add('listening-border', source === 'mic' ? 'mic' : 'system');
       state.mediaRecorder.start();
       setTimeout(() => {
         if (state.mediaRecorder?.state === 'recording') state.mediaRecorder.stop();
       }, MAX_RECORDING_MS);
-    } catch (_) {
-      contentArea?.classList.remove('listening-border', 'mic', 'system_audio');
+    } catch (e) {
+      removeListeningClasses();
+      const msg = e?.message || String(e);
+      const isScreen = source === 'system' || source === 'system_audio';
+      showToast(isScreen ? 'Debes compartir una pantalla para grabar su audio.' : 'No se pudo acceder al micrófono.', 'error');
     }
   });
 }

@@ -38,7 +38,11 @@ async function login(email, password) {
       profile = insertData;
     }
 
-    storage.setAuthToken(data.user.id);
+    if (data.session && data.session.access_token) {
+      storage.setSession(data.user.id, data.session.access_token, data.session.refresh_token || '');
+    } else {
+      storage.setAuthToken(data.user.id);
+    }
     return { ok: true, profile };
   } catch (e) {
     return { ok: false, error: e.message };

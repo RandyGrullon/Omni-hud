@@ -116,11 +116,19 @@ function registerShortcuts() {
   });
 
   globalShortcut.register(config.HOTKEYS.VOICE_SYSTEM, () => {
-    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('voice-trigger', 'system');
+    if (mainWindow && mainWindow.webContents) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('voice-trigger', 'system');
+    }
   });
 
   globalShortcut.register(config.HOTKEYS.VOICE_MIC, () => {
-    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('voice-trigger', 'mic');
+    if (mainWindow && mainWindow.webContents) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('voice-trigger', 'mic');
+    }
   });
 
   globalShortcut.register(config.HOTKEYS.VOICE_SYSTEM_AUDIO, () => {
@@ -136,35 +144,141 @@ function registerShortcuts() {
 }
 
 app.whenReady().then(() => {
+  if (app.isPackaged) {
+    try {
+      require('dotenv').config({ path: path.join(app.getPath('userData'), '.env') });
+    } catch (_) {}
+    // Asegurar OMNI_WEB_API_URL en instalación (por si config.js no cargó supabase.config.json)
+    if (!process.env.OMNI_WEB_API_URL) {
+      try {
+        const configPath = path.join(__dirname, '../src/main/supabase.config.json');
+        const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (data && data.OMNI_WEB_API_URL) process.env.OMNI_WEB_API_URL = data.OMNI_WEB_API_URL;
+      } catch (_) {}
+    }
+  }
   createWindow();
   registerShortcuts();
 
   ipcMain.handle('window:close', () => { if (mainWindow) mainWindow.close(); });
   ipcMain.handle('window:isVisible', () => mainWindow ? mainWindow.isVisible() : false);
 
-  ipcMain.handle('storage:loadChats', () => storage.loadChats());
+  ipcMain.handle('storage:loadChats', async () => {
+    try {
+      return await storage.loadChats();
+    } catch (e) {
+      console.error('storage:loadChats', e);
+      return [{ id: 0, title: 'New Session', messages: [] }];
+    }
+  });
   ipcMain.handle('storage:saveChats', (_, chats) => storage.saveChats(chats));
-  ipcMain.handle('storage:getAuthToken', () => storage.getAuthToken());
+  ipcMain.handle('storage:getAuthToken', () => {
+    try {
+      return storage.getAuthToken();
+    } catch (e) {
+      console.error('storage:getAuthToken', e);
+      return null;
+    }
+  });
   ipcMain.handle('storage:setAuthToken', (_, token) => storage.setAuthToken(token));
   ipcMain.handle('storage:removeAuthToken', () => storage.removeAuthToken());
   ipcMain.handle('storage:getGroqKey', () => storage.getGroqKey());
+  ipcMain.handle('storage:getGroqKeyAsync', async () => {
+    try {
+      return await storage.getGroqKeyAsync();
+    } catch (e) {
+      console.error('storage:getGroqKeyAsync', e);
+      return storage.getGroqKey();
+    }
+  });
   ipcMain.handle('storage:setGroqKey', (_, key) => storage.setGroqKey(key));
+  ipcMain.handle('storage:syncGroqKeyToWeb', async (_, key) => {
+    const accessToken = storage.getAccessToken();
+    const refreshToken = storage.getRefreshToken();
+    if (!key || typeof key !== 'string') {
+      return { ok: false, error: 'No key provided' };
+    }
+    if (!accessToken) {
+      return { ok: false, error: 'Session expired or incomplete. Log out and log in again to save the key to the cloud.' };
+    }
+    const baseUrl = (process.env.OMNI_WEB_API_URL || 'https://localhost:3000').replace(/\/$/, '');
+    const url = `${baseUrl}/api/profile/groq-key`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'X-Refresh-Token': refreshToken || '',
+        },
+        body: JSON.stringify({ key: key.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { ok: false, error: (data && data.error) || res.statusText };
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : 'Network error' };
+    }
+  });
+
+  ipcMain.handle('profile:update', async (_, payload) => {
+    const accessToken = storage.getAccessToken();
+    const refreshToken = storage.getRefreshToken();
+    if (!accessToken) return { ok: false, error: 'No session' };
+    const baseUrl = (process.env.OMNI_WEB_API_URL || '').replace(/\/$/, '');
+    if (!baseUrl) return { ok: false, error: 'OMNI_WEB_API_URL not set' };
+    try {
+      const res = await fetch(`${baseUrl}/api/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'X-Refresh-Token': refreshToken || '',
+        },
+        body: JSON.stringify({
+          first_name: payload.first_name,
+          last_name: payload.last_name,
+          username: payload.username,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: (data && data.error) || res.statusText };
+      return { ok: true, profile: data };
+    } catch (e) {
+      return { ok: false, error: e && e.message ? e.message : 'Network error' };
+    }
+  });
 
   ipcMain.handle('auth:login', async (_, email, password) => auth.login(email, password));
   ipcMain.handle('auth:logout', () => auth.logout());
   ipcMain.handle('auth:getProfile', async () => auth.getProfile());
-  ipcMain.handle('auth:validateAccess', async () => auth.validateAccess());
+  ipcMain.handle('auth:validateAccess', async () => {
+    try {
+      return await auth.validateAccess();
+    } catch (e) {
+      console.error('auth:validateAccess', e);
+      return { ok: false, needLogin: true, error: e && e.message ? e.message : 'Validation failed' };
+    }
+  });
   ipcMain.handle('auth:activate', async (_, key) => auth.activateKey(key));
 
   ipcMain.handle('ai:stream', async (_, payload) => {
-    const result = await ai.streamChat(payload, (chunk) => {
-      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('ai-chunk', chunk);
-    });
-    if (mainWindow && mainWindow.webContents) {
-      if (result.ok) mainWindow.webContents.send('ai-done', result.fullResponse || '');
-      else mainWindow.webContents.send('ai-error', result.error || 'Unknown error');
+    try {
+      const result = await ai.streamChat(payload, (chunk) => {
+        if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('ai-chunk', chunk);
+      });
+      if (mainWindow && mainWindow.webContents) {
+        if (result.ok) mainWindow.webContents.send('ai-done', result.fullResponse || '');
+        else mainWindow.webContents.send('ai-error', result.error || 'Unknown error');
+      }
+      return result;
+    } catch (e) {
+      const errMsg = e && (e.message || e.toString) ? (e.message || e.toString()) : 'Unknown error';
+      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('ai-error', errMsg);
+      return { ok: false, error: errMsg };
     }
-    return result;
   });
 
   ipcMain.on('ai-cancel', () => ai.cancel());

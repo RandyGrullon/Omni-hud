@@ -1,0 +1,5 @@
+{
+  "SUPABASE_URL": "https://dtlvhuwqviftpmipysji.supabase.co",
+  "SUPABASE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0bHZodXdxdmlmdHBtaXB5c2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMDM0NjQsImV4cCI6MjA4ODY3OTQ2NH0.0IdRQ4wQqtTCMaP2BpuCm8M69LRA4jlAVBXcXq0UwU0",
+  "OMNI_WEB_API_URL": "https://omni-web.vercel.app"
+}

@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { $, escapeHtml } from './utils.js';
 import { showToast } from './ui.js';
-import { ensureCurrentChat, appendUserMessage } from './chat.js';
+import { ensureCurrentChat, appendUserMessage, persistChats } from './chat.js';
 import { PAGES } from './constants.js';
 
 let navigateRef = null;
@@ -126,7 +126,7 @@ export async function analyzeFile(filePath, navigate) {
   const chat = ensureCurrentChat(result.filename ? result.filename.slice(0, 20) + (result.filename.length > 20 ? '...' : '') : 'Documento');
   appendUserMessage(`[DOC] ${result.filename}\n${result.content}`);
   chat.messages.push({ role: 'user', content: `[DOC]\n${result.content}` });
-  await window.omni.saveChats(state.chats);
+  await persistChats();
   showToast('Archivo añadido al chat', 'success');
   if (nav) nav(PAGES.CHAT);
 }

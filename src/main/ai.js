@@ -5,14 +5,12 @@ const storage = require('./storage');
 
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-let client = null;
 let abortController = null;
 
-function getClient() {
-  const apiKey = storage.getGroqKey() || process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error('GROQ_API_KEY not set');
-  if (!client) client = new Groq({ apiKey });
-  return client;
+async function getClient() {
+  const apiKey = await storage.getGroqKeyAsync();
+  if (!apiKey) throw new Error('GROQ_API_KEY not set. Configure in app Config or in your profile on the web.');
+  return new Groq({ apiKey });
 }
 
 function cancel() {
@@ -22,7 +20,7 @@ function cancel() {
 async function streamChat(payload, onChunk) {
   const { prompt, history, imageB64 } = payload;
   abortController = new AbortController();
-  const groq = getClient();
+  const groq = await getClient();
 
   const model = imageB64 ? config.VISION_MODEL : config.GROQ_MODEL;
   const messages = [{ role: 'system', content: config.DEVELOPER_SYSTEM_PROMPT }];

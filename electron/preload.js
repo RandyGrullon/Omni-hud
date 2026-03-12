@@ -12,7 +12,9 @@ contextBridge.exposeInMainWorld('omni', {
   setAuthToken: (token) => ipcRenderer.invoke('storage:setAuthToken', token),
   removeAuthToken: () => ipcRenderer.invoke('storage:removeAuthToken'),
   getGroqKey: () => ipcRenderer.invoke('storage:getGroqKey'),
+  getGroqKeyAsync: () => ipcRenderer.invoke('storage:getGroqKeyAsync'),
   setGroqKey: (key) => ipcRenderer.invoke('storage:setGroqKey', key),
+  syncGroqKeyToWeb: (key) => ipcRenderer.invoke('storage:syncGroqKeyToWeb', key),
 
   // Auth
   login: (email, password) => ipcRenderer.invoke('auth:login', email, password),
@@ -20,12 +22,13 @@ contextBridge.exposeInMainWorld('omni', {
   getProfile: () => ipcRenderer.invoke('auth:getProfile'),
   validateAccess: () => ipcRenderer.invoke('auth:validateAccess'),
   activateKey: (key) => ipcRenderer.invoke('auth:activate', key),
+  updateProfile: (payload) => ipcRenderer.invoke('profile:update', payload),
 
   // AI
   streamChat: (payload) => ipcRenderer.invoke('ai:stream', payload),
   cancelAi: () => ipcRenderer.send('ai-cancel'),
   onAiChunk: (cb) => { ipcRenderer.on('ai-chunk', (_, chunk) => cb(chunk)); },
-  onAiDone: (cb) => { ipcRenderer.once('ai-done', (_, full) => cb(full)); },
+  onAiDone: (cb) => { ipcRenderer.on('ai-done', (_, full) => cb(full)); },
   onAiError: (cb) => { ipcRenderer.on('ai-error', (_, err) => cb(err)); },
 
   // Voice (renderer records, main transcribes)

@@ -7,6 +7,8 @@ let navigateRef = null;
 let streamingBuffer = '';
 let streamingRenderScheduled = null;
 let expectingCompleteCodeResponse = false;
+let lastFailedPrompt = '';
+let lastRawError = '';
 
 const COMPLETAR_INSTRUCTION = [
   'Completa el siguiente código. Devuelve el código completo.',
@@ -20,6 +22,15 @@ function applyCompletedCodeHighlight(html) {
 
 export function init(navigate) {
   navigateRef = navigate;
+  const display = $('chat-display');
+  if (display) {
+    display.addEventListener('click', (e) => {
+      if (e.target.classList.contains('btn-retry-ai')) {
+        e.preventDefault();
+        handleRetryClick();
+      }
+    });
+  }
 }
 
 function navigate(index) {
@@ -87,7 +98,7 @@ export function renderChatList() {
       const newTitle = prompt('Rename session', state.chats[idx].title);
       if (newTitle?.trim()) {
         state.chats[idx].title = newTitle.trim();
-        window.omni.saveChats(state.chats);
+        persistChats();
         renderChatList();
         showToast('Nombre actualizado', 'success');
       }
@@ -126,7 +137,7 @@ export function hideLogoutConfirm() {
   if (overlay) overlay.classList.remove('show');
 }
 
-export function confirmDeleteChat() {
+export async function confirmDeleteChat() {
   const overlay = $('modal-delete-overlay');
   const idx = overlay ? parseInt(overlay.dataset.pendingIndex, 10) : -1;
   hideDeleteConfirm();
@@ -140,7 +151,7 @@ export function confirmDeleteChat() {
     state.currentChatIndex = Math.min(state.currentChatIndex, state.chats.length - 1);
     switchChat(state.currentChatIndex);
   }
-  window.omni.saveChats(state.chats);
+  await persistChats();
   renderChatList();
   showToast(state.chats.length <= 1 ? 'Chat borrado' : 'Conversación eliminada', 'info');
 }
@@ -241,8 +252,27 @@ export function finalizeAiMessage(fullText) {
   /* No scroll al terminar: que se quede mirando el mensaje donde está */
 }
 
+const MAX_CHATS = 5;
+
+export async function persistChats() {
+  const result = await window.omni.saveChats(state.chats);
+  if (result && result.chats) {
+    state.chats = result.chats;
+    renderChatList();
+  }
+}
+
+function ensureMaxChats() {
+  while (state.chats.length >= MAX_CHATS) {
+    state.chats.splice(0, 1);
+    if (state.currentChatIndex > 0) state.currentChatIndex--;
+    else if (state.currentChatIndex >= state.chats.length) state.currentChatIndex = state.chats.length - 1;
+  }
+}
+
 export function ensureCurrentChat(title) {
   if (state.currentChatIndex === -1 || state.currentChatIndex >= state.chats.length) {
+    ensureMaxChats();
     const newId = state.chats.length ? Math.max(...state.chats.map((c) => c.id)) + 1 : 0;
     state.chats.push({ id: newId, title: title || 'New Session', messages: [] });
     state.currentChatIndex = state.chats.length - 1;
@@ -251,8 +281,15 @@ export function ensureCurrentChat(title) {
   return state.chats[state.currentChatIndex];
 }
 
+function setChatInputDisabled(disabled) {
+  const input = $('chat-input');
+  if (input) input.disabled = !!disabled;
+}
+
 export async function sendMessage(prompt, imageB64) {
+  if (state.streaming) return;
   if (state.currentChatIndex === -1 || state.currentChatIndex >= state.chats.length) {
+    ensureMaxChats();
     const newId = state.chats.length ? Math.max(...state.chats.map((c) => c.id)) + 1 : 0;
     const title = prompt.slice(0, 20) + (prompt.length > 20 ? '...' : '');
     state.chats.push({ id: newId, title, messages: [] });
@@ -276,20 +313,50 @@ export async function sendMessage(prompt, imageB64) {
 
   chat.messages.push({ role: 'user', content: prompt });
   appendUserMessage(prompt);
-  await window.omni.saveChats(state.chats);
 
   state.streaming = true;
-  const history = chat.messages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
-  const result = await window.omni.streamChat({ prompt: promptToSend, history, imageB64: imageB64 || null });
-  state.streaming = false;
+  setChatInputDisabled(true);
+  appendAiChunk('');
+  const streamingBubble = document.querySelector('.ai-msg.streaming .bubble');
+  if (streamingBubble) {
+    streamingBubble.innerHTML = '<span class="ai-thinking-msg"><span class="streaming-loader" aria-hidden="true"></span> Pensando...</span>';
+  }
+  const display = $('chat-display');
+  if (display) display.scrollTop = display.scrollHeight;
 
-  if (!result.ok) {
+  try {
+    await persistChats();
+  } catch (_) {
+    // No bloquear el chat si falla guardar historial
+  }
+
+  const history = chat.messages.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
+  let result;
+  try {
+    result = await window.omni.streamChat({ prompt: promptToSend, history, imageB64: imageB64 || null });
+  } catch (e) {
+    result = { ok: false, error: e && (e.message || e.toString()) ? (e.message || String(e)) : 'No se pudo conectar con la IA.' };
+  }
+  state.streaming = false;
+  setChatInputDisabled(false);
+  const chatInputEl = $('chat-input');
+  if (chatInputEl) chatInputEl.focus();
+
+  if (!result || !result.ok) {
     expectingCompleteCodeResponse = false;
-    appendAiChunk('');
-    const errEl = document.querySelector('.ai-msg.streaming .bubble');
-    if (errEl) errEl.innerHTML = `<span style="color:#ef4444">${escapeHtml(result.error)}</span>`;
-    const last = document.querySelector('.ai-msg.streaming');
-    if (last) last.classList.remove('streaming');
+    const rawErr = result && result.error != null ? String(result.error) : '';
+    const errMsg = getFriendlyErrorMessage(rawErr || 'Error desconocido');
+    lastFailedPrompt = prompt;
+    lastRawError = rawErr;
+    let last = document.querySelector('.ai-msg.streaming');
+    if (!last) appendAiChunk('');
+    last = document.querySelector('.ai-msg.streaming');
+    if (last) {
+      const errEl = last.querySelector('.bubble');
+      if (errEl) errEl.innerHTML = buildErrorBubbleContent(errMsg, rawErr);
+      last.classList.remove('streaming');
+    }
+    showToast(errMsg.slice(0, 50) + (errMsg.length > 50 ? '…' : ''), 'error');
   }
 }
 
@@ -299,11 +366,50 @@ export function setupClearChatListener() {
       state.chats[state.currentChatIndex].messages = [];
       state.chats[state.currentChatIndex].title = 'New Session';
       loadChatContent([]);
-      window.omni.saveChats(state.chats);
+      persistChats();
       renderChatList();
       showToast('Chat borrado', 'info');
     }
   });
+}
+
+function getFriendlyErrorMessage(err) {
+  if (!err || typeof err !== 'string') return 'No se pudo obtener respuesta. Revisa tu conexión o la clave de Groq.';
+  const lower = err.toLowerCase();
+  if (lower.includes('groq_api_key') || lower.includes('not set') || lower.includes('configure')) {
+    return 'No hay clave de Groq. Configúrala en la pestaña Config de esta app o en tu perfil en la web de Omni.';
+  }
+  if (lower.includes('network') || lower.includes('fetch') || lower.includes('enotfound')) {
+    return 'Error de conexión. Comprueba tu internet o que la URL de la API (OMNI_WEB_API_URL) sea correcta.';
+  }
+  if (lower.includes('unauthorized') || lower.includes('401')) {
+    return 'Sesión expirada. Vuelve a iniciar sesión para usar la clave guardada en la web.';
+  }
+  return err;
+}
+
+function buildErrorBubbleContent(friendlyMsg, rawErr) {
+  const raw = rawErr ? String(rawErr).trim() : '';
+  const logHtml = raw
+    ? `<details class="ai-error-log"><summary>Ver detalles / log</summary><pre class="ai-error-pre">${escapeHtml(raw)}</pre></details>`
+    : '';
+  return `<span class="ai-error-msg">${escapeHtml(friendlyMsg)}</span>${logHtml}<button type="button" class="btn-retry-ai">Reintentar</button>`;
+}
+
+function handleRetryClick() {
+  if (!lastFailedPrompt || state.currentChatIndex < 0) return;
+  const display = $('chat-display');
+  const chat = state.chats[state.currentChatIndex];
+  if (!chat?.messages?.length) return;
+  chat.messages.pop();
+  if (display && display.children.length >= 2) {
+    display.removeChild(display.lastElementChild);
+    display.removeChild(display.lastElementChild);
+  }
+  const prompt = lastFailedPrompt;
+  lastFailedPrompt = '';
+  lastRawError = '';
+  sendMessage(prompt);
 }
 
 export function setupAiListeners() {
@@ -316,20 +422,37 @@ export function setupAiListeners() {
       else chat.messages.push({ role: 'model', content: full });
     }
     finalizeAiMessage(full);
-    window.omni.saveChats(state.chats);
+    persistChats();
+    state.streaming = false;
+    setChatInputDisabled(false);
+    const inputEl = $('chat-input');
+    if (inputEl) inputEl.focus();
   });
   window.omni.onAiError((err) => {
     finalizeAiMessage('');
     const display = $('chat-display');
+    const msg = getFriendlyErrorMessage(err);
+    const rawErr = err != null ? String(err) : '';
+    const chat = state.chats[state.currentChatIndex];
+    const lastUser = chat?.messages?.filter((m) => m.role === 'user').pop();
+    lastFailedPrompt = lastUser?.content ?? '';
+    lastRawError = rawErr;
     if (display) {
-      const last = display.querySelector('.ai-msg.streaming');
+      let last = display.querySelector('.ai-msg.streaming');
+      if (!last) {
+        appendAiChunk('');
+        last = display.querySelector('.ai-msg.streaming');
+      }
       if (last) {
         last.classList.remove('streaming');
         const bubble = last.querySelector('.bubble');
-        if (bubble) bubble.innerHTML = `<span style="color:#ef4444">${escapeHtml(err)}</span>`;
+        if (bubble) bubble.innerHTML = buildErrorBubbleContent(msg, rawErr);
       }
     }
     state.streaming = false;
-    showToast('Error en la respuesta', 'error');
+    setChatInputDisabled(false);
+    const inputEl = $('chat-input');
+    if (inputEl) inputEl.focus();
+    showToast(msg.slice(0, 50) + (msg.length > 50 ? '…' : ''), 'error');
   });
 }

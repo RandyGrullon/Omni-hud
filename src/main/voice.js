@@ -6,7 +6,7 @@ const storage = require('./storage');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 async function transcribe(audioBase64) {
-  const apiKey = storage.getGroqKey() || process.env.GROQ_API_KEY;
+  const apiKey = await storage.getGroqKeyAsync();
   if (!apiKey) return { ok: false, error: 'GROQ_API_KEY not set' };
 
   const { app } = require('electron');

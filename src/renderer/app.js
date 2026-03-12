@@ -1,7 +1,7 @@
 import { PAGES } from './constants.js';
 import { state } from './state.js';
 import { $, setupPasswordToggle } from './utils.js';
-import { showError, showLoader, hideLoader, showToast } from './ui.js';
+import { showError, showLoader, hideLoader, showToast, initSplashLogs } from './ui.js';
 import * as chat from './chat.js';
 import * as auth from './auth.js';
 import * as fileExplorer from './fileExplorer.js';
@@ -34,14 +34,16 @@ const chatApi = {
   loadChatContent: chat.loadChatContent
 };
 
+initSplashLogs();
 chat.init(navigate);
 auth.init(chatApi);
 fileExplorer.init(navigate);
 
 setupPasswordToggle('login-password', 'btn-toggle-login-password');
 setupPasswordToggle('config-api-key', 'btn-toggle-config-password');
+setupPasswordToggle('profile-groq-key', 'btn-toggle-profile-groq');
 
-$('btn-login').addEventListener('click', async () => {
+async function doLogin() {
   const email = $('login-email').value.trim();
   const password = $('login-password').value.trim();
   showError('login-error', '');
@@ -70,7 +72,7 @@ $('btn-login').addEventListener('click', async () => {
   state.profile = result.profile;
   showToast('Sesión iniciada', 'success');
   if (result.profile.plan === 'architect' || result.profile.purchase_id) {
-    const key = await window.omni.getGroqKey();
+    const key = await window.omni.getGroqKeyAsync();
     navigate(key ? PAGES.CHAT : PAGES.CONFIG);
   } else {
     navigate(PAGES.ACTIVATION);
@@ -80,6 +82,11 @@ $('btn-login').addEventListener('click', async () => {
   state.currentChatIndex = state.chats.length === 0 ? -1 : 0;
   chat.renderChatList();
   chat.loadChatContent(state.currentChatIndex >= 0 ? state.chats[state.currentChatIndex].messages : []);
+}
+
+$('login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  doLogin();
 });
 
 $('btn-activate').addEventListener('click', async () => {
@@ -112,7 +119,12 @@ $('btn-save-config').addEventListener('click', async () => {
   const apiKey = $('config-api-key').value.trim();
   if (!apiKey) return;
   await window.omni.setGroqKey(apiKey);
-  showToast('Configuración guardada', 'success');
+  const syncResult = await window.omni.syncGroqKeyToWeb(apiKey);
+  if (syncResult && syncResult.ok) {
+    showToast('Configuración guardada y sincronizada con la web', 'success');
+  } else {
+    showToast('Configuración guardada localmente; no se pudo sincronizar con la web', 'success');
+  }
   navigate(PAGES.CHAT);
   chat.loadChatContent(state.currentChatIndex >= 0 && state.chats[state.currentChatIndex] ? state.chats[state.currentChatIndex].messages : []);
 });
@@ -152,6 +164,9 @@ $('btn-profile').addEventListener('click', async () => {
       if (res.ok) profile = res.profile;
     }
     auth.fillProfileEls(profile);
+    const groqKey = await window.omni.getGroqKeyAsync();
+    auth.setProfileGroqKeyStatus(!!groqKey);
+    auth.setProfileGroqKeyPlaceholder(!!groqKey);
     if (!profile) $('profile-error').textContent = 'No se pudo cargar el perfil.';
   } catch (_) {
     auth.fillProfileEls(null);
@@ -166,6 +181,72 @@ $('profile-back').addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
   navigate(PAGES.CHAT);
+});
+
+$('btn-profile-save').addEventListener('click', () => {
+  const data = auth.getProfileFormData();
+  if (!data.first_name || !data.last_name) {
+    showToast('Nombre y apellido son obligatorios', 'error');
+    return;
+  }
+  $('modal-profile-save-overlay').classList.add('show');
+});
+
+$('btn-profile-save-cancel').addEventListener('click', () => {
+  $('modal-profile-save-overlay').classList.remove('show');
+});
+
+$('modal-profile-save-overlay').addEventListener('click', (e) => {
+  if (e.target === $('modal-profile-save-overlay')) e.target.classList.remove('show');
+});
+
+$('btn-profile-save-confirm').addEventListener('click', async () => {
+  $('modal-profile-save-overlay').classList.remove('show');
+  const data = auth.getProfileFormData();
+  try {
+    const result = await window.omni.updateProfile(data);
+    if (result.ok) {
+      state.profile = state.profile ? { ...state.profile, ...data } : data;
+      if (result.profile) state.profile = result.profile;
+      auth.fillProfileEls(state.profile);
+      showToast('Perfil guardado', 'success');
+    } else {
+      showToast(result.error || 'Error al guardar', 'error');
+    }
+  } catch (_) {
+    showToast('Error al guardar perfil', 'error');
+  }
+});
+
+$('btn-profile-neural-key').addEventListener('click', () => {
+  navigate(PAGES.ACTIVATION);
+});
+
+$('btn-profile-save-groq').addEventListener('click', async () => {
+  const input = $('profile-groq-key');
+  const key = input && input.value ? input.value.trim() : '';
+  if (!key) {
+    showToast('Introduce una clave de Groq', 'error');
+    return;
+  }
+  try {
+    await window.omni.setGroqKey(key);
+    const sync = await window.omni.syncGroqKeyToWeb(key);
+    if (sync.ok) {
+      if (input) input.value = '';
+      auth.setProfileGroqKeyStatus(true);
+      auth.setProfileGroqKeyPlaceholder(true);
+      showToast('Clave Groq guardada', 'success');
+    } else {
+      const err = sync.error || 'Error al sincronizar';
+      const msg = err.toLowerCase().includes('session') || err.toLowerCase().includes('sesión') || err.toLowerCase().includes('session or key')
+        ? 'Sesión incompleta. Cierra sesión e inicia de nuevo para guardar la clave en la nube.'
+        : err;
+      showToast(msg, 'error');
+    }
+  } catch (_) {
+    showToast('Error al guardar clave Groq', 'error');
+  }
 });
 
 $('btn-profile-logout').addEventListener('click', () => chat.showLogoutConfirm());

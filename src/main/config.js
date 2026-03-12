@@ -1,6 +1,17 @@
 const path = require('path');
-// Load .env from project root
+
+// Load .env from project root (development)
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+// When installed, .env is not bundled; load bundled config via require (reliable from asar)
+try {
+  const data = require('./supabase.config.json');
+  if (data && typeof data === 'object') {
+    if (data.SUPABASE_URL) process.env.SUPABASE_URL = data.SUPABASE_URL;
+    if (data.SUPABASE_KEY) process.env.SUPABASE_KEY = data.SUPABASE_KEY;
+    if (data.OMNI_WEB_API_URL) process.env.OMNI_WEB_API_URL = data.OMNI_WEB_API_URL;
+  }
+} catch (_) {}
 
 const PAGES = {
   LOGIN: 0,
