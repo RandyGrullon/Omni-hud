@@ -44,26 +44,17 @@ export function setupToolsMenu(contentArea) {
   });
 }
 
-async function getScreenAudioStream() {
-  const audioOpts = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: false };
-  try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: false,
-      audio: audioOpts
-    });
-    if (stream.getAudioTracks().length > 0) return stream;
-    stream.getTracks().forEach((t) => t.stop());
-  } catch (_) {}
-  const fallback = await navigator.mediaDevices.getDisplayMedia({
+async function getSystemAudioStream() {
+  const stream = await navigator.mediaDevices.getDisplayMedia({
     video: true,
     audio: true
   });
-  const audioTracks = fallback.getAudioTracks();
+  const audioTracks = stream.getAudioTracks();
   if (audioTracks.length === 0) {
-    fallback.getTracks().forEach((t) => t.stop());
+    stream.getTracks().forEach((t) => t.stop());
     return null;
   }
-  fallback.getVideoTracks().forEach((t) => t.stop());
+  stream.getVideoTracks().forEach((t) => t.stop());
   return new MediaStream(audioTracks);
 }
 
@@ -76,16 +67,19 @@ export function setupVoice(contentArea) {
       return;
     }
     try {
-      const isScreen = source === 'system' || source === 'system_audio';
-      const stream = isScreen
-        ? await getScreenAudioStream()
+      const isSystem = source === 'system' || source === 'system_audio';
+      const stream = isSystem
+        ? await getSystemAudioStream()
         : await navigator.mediaDevices.getUserMedia({ audio: true });
 
       if (!stream || stream.getAudioTracks().length === 0) {
         if (stream) stream.getTracks().forEach((t) => t.stop());
-        showToast(isScreen ? 'Selecciona una pantalla con audio para grabar.' : 'No se pudo acceder al micrófono.', 'error');
+        showToast(isSystem ? 'No se pudo acceder al audio del sistema.' : 'No se pudo acceder al micrófono.', 'error');
         return;
       }
+
+      if (isSystem) showToast('Escuchando audio del sistema…', 'info');
+      else showToast('Escuchando micrófono…', 'info');
 
       state.mediaRecorder = new MediaRecorder(stream);
       state.recordingChunks = [];
@@ -113,9 +107,8 @@ export function setupVoice(contentArea) {
       }, MAX_RECORDING_MS);
     } catch (e) {
       removeListeningClasses();
-      const msg = e?.message || String(e);
-      const isScreen = source === 'system' || source === 'system_audio';
-      showToast(isScreen ? 'Debes compartir una pantalla para grabar su audio.' : 'No se pudo acceder al micrófono.', 'error');
+      const isSystem = source === 'system' || source === 'system_audio';
+      showToast(isSystem ? 'No se pudo acceder al audio del sistema.' : 'No se pudo acceder al micrófono.', 'error');
     }
   });
 }

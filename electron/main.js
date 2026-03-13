@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, dialog, session, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const config = require('../src/main/config');
@@ -159,6 +159,20 @@ app.whenReady().then(() => {
   }
   createWindow();
   registerShortcuts();
+
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
+      if (sources.length === 0) {
+        callback({});
+        return;
+      }
+      try {
+        callback({ video: sources[0], audio: 'loopback' });
+      } catch (e) {
+        callback({});
+      }
+    }).catch(() => callback({}));
+  });
 
   ipcMain.handle('window:close', () => { if (mainWindow) mainWindow.close(); });
   ipcMain.handle('window:isVisible', () => mainWindow ? mainWindow.isVisible() : false);
